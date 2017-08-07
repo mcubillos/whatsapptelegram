@@ -3,7 +3,7 @@ import sys
 from src.static import SETTINGS
 from src.helper import get_contacto, get_numero
 from src.telegram import tgrambot
-from src.whatspp import whatsappbot
+from src.whatsapp import whatsappbot
 from telebot import util as tgutil
 
 def sigint_handler(signal, frame):

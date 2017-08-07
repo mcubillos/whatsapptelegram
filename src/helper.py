@@ -11,10 +11,13 @@ def db_agregar_contacto(nombre,numero):
 	return resultado.inserted_id
 
 def db_lista_contactos():
-	resultado = DB.contactos.find().map(function(u){
-		return u.nombre, u.numero
-		})
-	return resultado
+	contactos = DB.contactos.find()
+	resultado = []
+	
+	def mapContact(nombre , numero):
+		resultado.append((nombre, numero))
+	
+	return map(mapContact, contactos)
 
 def db_eliminar_contacto(nombre):
 	DB.contactos.delete_one({'nombre':nombre.lower()})

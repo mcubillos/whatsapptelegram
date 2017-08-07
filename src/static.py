@@ -12,7 +12,7 @@ SIGNAL_TELEGRAM = signal('TO_TELEGRAM')
 SIGNAL_WHATSAPP = signal('TO_WHASTAPP')
 
 def init_whatsapptelegram():
-	conf_path = os.path.abspath(os.getenv('CONF',''))
+	conf_path = os.path.abspath(os.getenv('WHATSAPPTELEGRAM_CONF',''))
 
 	if not conf_path or not os.path.isfile(conf_path):
 		sys.exit('No se pudo encontrar el archivo de configuracion')
