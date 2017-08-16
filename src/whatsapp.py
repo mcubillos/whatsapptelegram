@@ -6,12 +6,16 @@ from yowsup.layers.protocol_receipts.protocolentities import OutgoingReceiptProt
 from yowsup.layers.protocol_acks.protocolentities import OutgoingAckProtocolEntity
 from yowsup.stacks import YowStackBuilder
 
-from src.static import SETTINGS, SIGNAL_TELEGRAM
+from src.static import SETTINGS, SIGNAL_TELEGRAM, obtener_logger
+
+logger = obtener_logger('whatsapp')
 
 class WhatsappLayer(YowInterfaceLayer):
 	@ProtocolEntityCallback('message')
 	def on_message(self, message):
-		sender = message.getFrom(full=False)
+		numero = message.getFrom(full=False)
+
+		logger.debug('Se recibio mensaje de %s' % numero)
 
 		receipt = OutgoingReceiptProtocolEntity(
 			message.getId(),
@@ -23,14 +27,16 @@ class WhatsappLayer(YowInterfaceLayer):
 		self.toLower(receipt)
 
 		if message.getType() != 'text':
+			logger.debug('No hay texto para el mensaje, no se enviara')
 			return
 
-		body = message.getBody()
-
-		SIGNAL_TELEGRAM.send('whatsappbot', phone=sender, message=body)
+		mensaje = message.getBody()
+		logger.info('Reenviando mensaje a Telegram')
+		SIGNAL_TELEGRAM.send('whatsappbot', numero=numero, mensaje=mensaje)
 
 	@ProtocolEntityCallback('receipt')
 	def on_receipt(self, entity):
+		logger.debug('Mensaje ACK')
 		ack = OutgoingAckProtocolEntity(
 			entity.getId(),
 			'receipt',
@@ -43,6 +49,7 @@ class WhatsappLayer(YowInterfaceLayer):
 		numero = kwargs.get('numero')
 
 		if not numero:
+			logger.debug('No se proporciono numero de telefono')
 			return
 
 		mensaje = kwargs.get('mensaje')

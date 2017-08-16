@@ -1,5 +1,0 @@
-blinker==1.4
-pyTelegramBotAPI==2.1.7
-six==1.10.0
-yowsup2==2.5.0
-pymongo==3.4.0
