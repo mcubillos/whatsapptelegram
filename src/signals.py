@@ -12,28 +12,36 @@ def sigint_handler(signal, frame):
 
 def to_telegram_handler(sender, **kwargs):
 	numero = kwargs.get('numero')
-	mensaje = kwargs.get('mensaje', '')
+	mensaje = kwargs.get('mensaje', "")
+	is_media = kwargs.get('is_media')
 
 	chat_id = SETTINGS['owner_telegram']
+	if is_media:
+		try:
+			with open(mensaje) as file:
+				tgrambot.send_photo(chat_id, file)
+		except FileNotFoundError:
+			logger.info("Error con el archivo")
 
-	output = "Mensaje para %s\n" % numero
+	output = "Mensaje de %s\n" % numero
 	output += '---------\n'
 	output += mensaje
-	logger.info('Mensaje recibido para %s' % numero)
+	logger.info('Mensaje recibido de %s' % numero)
 
 	for chunk in tgutil.split_string(output, 3000):
 		tgrambot.send_message(chat_id, chunk)
 
 def to_whatsapp_handler(sender, **kwargs):
 	numero = kwargs.get('numero')
-	mensaje = kwargs.get('mensaje')
+	mensaje = kwargs.get('mensaje', "")
+	is_media = kwargs.get('is_media')
 
 	if not numero:
 		tgrambot.send_message(
 			SETTINGS['owner_telegram'],
-			'Numero desconocido: "%s"' % numero
+			'No se envio numero'
 		)
 		return
 
 	logger.info('Enviando mensaje para %s' % numero)
-	whatsappbot.send_msg(numero=numero, mensaje=mensaje)
+	whatsappbot.send_msg(numero=numero, mensaje=mensaje, is_media=is_media)
