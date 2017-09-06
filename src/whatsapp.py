@@ -138,13 +138,16 @@ class WhatsappLayer(YowInterfaceLayer):
 	def send_file(self, file_path, url, to, ip=None):
 		filename, extension = os.path.splitext(file_path)
 		entity = None
-
+		logger.info(file_path)
 		if extension in EXT_IMAGE:
 			entity = ImageDownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, ip,to)
+			self.toLower(entity)
 		elif extension in EXT_VIDEO:
 			entity = DownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, "video", ip, to)
+			self.toLower(entity)
 		elif extension in EXT_AUDIO:
 			entity = DownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, "audio", ip, to)
+			self.toLower(entity)
 		if entity:
 			self.toLower(entity)
 	
