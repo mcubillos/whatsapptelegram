@@ -84,5 +84,5 @@ def enviar_whatsapp(message):
 		response.raise_for_status()
 		for block in response.iter_content(4096):
 			fout.write(block)
-	ṕath = os.path.dirname(os.path.realpath(file_name))
-	SIGNAL_WHATSAPP.send('tgrambot', numero=numero, mensaje=ṕath + '/' + file_name, is_media=True)
+	path = os.path.dirname(os.path.realpath(file_name))
+	SIGNAL_WHATSAPP.send('tgrambot', numero=numero, mensaje=path + '/' + file_name, is_media=True)

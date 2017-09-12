@@ -12,6 +12,10 @@ from yowsup.common.tools import Jid
 from yowsup.stacks import YowStackBuilder
 
 import os
+import threading
+import sys
+import io
+from PIL import Image
 
 from src.static import SETTINGS, SIGNAL_TELEGRAM, obtener_logger
 
@@ -22,6 +26,11 @@ EXT_AUDIO = ['.mp3', '.wav', '.aac', '.wma']
 EXT_VIDEO = ['.mp4']
 
 class WhatsappLayer(YowInterfaceLayer):
+	def __init__(self):
+		super(WhatsappLayer, self).__init__()
+		self.ackQueue = []
+		self.lock = threading.Condition()
+
 	def get_upload_entity(self,path):
 		filename, extension = os.path.splitext(path)
 		logger.info(extension)
@@ -56,15 +65,27 @@ class WhatsappLayer(YowInterfaceLayer):
 
 		if message.getType() == 'text':
 			mensaje = message.getBody()
+			messageForSend = mensaje.encode('latin-1').decode() if sys.version_info >= (3,0) else mensaje
 			logger.info('Reenviando mensaje a Telegram')
-			SIGNAL_TELEGRAM.send('whatsappbot', numero=numero, mensaje=mensaje, is_media=False)
+			SIGNAL_TELEGRAM.send('whatsappbot', numero=numero, mensaje=messageForSend, is_media=False)
 		elif message.getType() == 'media' :
-			if message.getMediaType() in ("image","audio","video"):
-				imagenUrl = message.getMediaUrl()
+			if message.getMediaType() in ("image", "audio", "video"):
+				file_name = message.getMediaUrl().decode("utf-8").split('/d/f/')[1].split('.')[0]
+				ext = message.getExtension()
+
+				mediaContent = message.getMediaContent()
+				image = Image.open(io.BytesIO(mediaContent))
+				image.save(file_name+ext)
+
+				path = os.path.dirname(os.path.realpath(file_name+ext))
+				imagenUrl = path +"/"+ file_name + ext
+
 				logger.info('Reenviando imagen a Telegram')
 				SIGNAL_TELEGRAM.send('whatsappbot', numero=numero, mensaje=imagenUrl, is_media=True)
-			elif message.getMediaType() == 'location':
-				logger.info('Reenviando locacion a Telegram')
+			else:
+				logger.info('[Tipo de media: %s]' % message.getMediaType())
+		else:
+			logger.info('No se conoce el tipo de mensaje %s' % message.getType())
 
 	@ProtocolEntityCallback('receipt')
 	def on_receipt(self, entity):
@@ -78,6 +99,7 @@ class WhatsappLayer(YowInterfaceLayer):
 		self.toLower(ack)
 
 	def send_msg(self, **kwargs):
+		self.lock.acquire()
 		numero = kwargs.get('numero')
 
 		if not numero:
@@ -93,20 +115,22 @@ class WhatsappLayer(YowInterfaceLayer):
 			path = mensaje
 			entidad = self.get_upload_entity(path)
 			logger.info(entidad)
-			success_fn = lambda success, original:self.on_request_upload_result(jid, path, success, original)
+			success_fn = lambda success, original: self.on_request_upload_result(jid, path, success, original,caption)
 			error_fn = lambda error, original: self.on_request_upload_error(jid,path,error,original)
-			self._sendIq(entidad,success_fn,error_fn)
+			self._sendIq(entidad, success_fn, error_fn)
 		else:
 			entidad_mensaje = TextMessageProtocolEntity(mensaje,to=jid)
+			self.ackQueue.append(entidad_mensaje.getId())
 			self.toLower(entidad_mensaje)
+		self.lock.release()
 	
 	def disconnect(self, result=None):
 		self.broadcastEvent(YowLayerEvent(YowNetworkLayer.EVENT_STATE_DISCONNECT))
 		if result:
 			raise ValueError(result)
 
-	def on_request_upload_result(self, jid, file_path, result_entity, request_entity):
-		logger.info(file_path)
+	def on_request_upload_result(self, jid, file_path, result_entity, request_entity, caption=None):
+		logger.info("Estoy en el upload")
 		if result_entity.isDuplicate():
 			self.send_file(file_path, result_entity.getUrl(), jid, result_entity.getIp())
 		else:
@@ -122,14 +146,16 @@ class WhatsappLayer(YowInterfaceLayer):
 			)
 			uploader.start()
 
-	def on_request_upload_error(self,*args):
-		logger.info(*args)
+	def on_request_upload_error(self, jid, file_path, error_entity, original_entity):
+		logger.info(file_path)
+		logger.info(error_entity)
 		self.disconnect("ERROR REQUEST")
 
 	def on_upload_error(self, file_path, jid, url):
 		self.disconnect("ERROR UPLOAD")
 
 	def on_upload_success(self, file_path, jid, url):
+		logger.info("Hola estoy en el upload")
 		self.send_file(file_path, url, jid)
 
 	def on_upload_progress(self, file_path, jid, url, progress):
@@ -140,16 +166,12 @@ class WhatsappLayer(YowInterfaceLayer):
 		entity = None
 		logger.info(file_path)
 		if extension in EXT_IMAGE:
-			entity = ImageDownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, ip,to)
-			self.toLower(entity)
+			entity = ImageDownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, ip,to, caption =caption)
 		elif extension in EXT_VIDEO:
-			entity = DownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, "video", ip, to)
-			self.toLower(entity)
+			entity = VideoDownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, ip, to, caption =caption)
 		elif extension in EXT_AUDIO:
-			entity = DownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, "audio", ip, to)
-			self.toLower(entity)
-		if entity:
-			self.toLower(entity)
+			entity = AudioDownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, ip, to)
+		self.toLower(entity)
 	
 whatsappbot = WhatsappLayer()
 

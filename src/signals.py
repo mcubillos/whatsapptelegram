@@ -15,11 +15,11 @@ def to_telegram_handler(sender, **kwargs):
 	mensaje = kwargs.get('mensaje', "")
 	is_media = kwargs.get('is_media')
 
+	logger.info(mensaje)
 	chat_id = SETTINGS['owner_telegram']
 	if is_media:
 		try:
-			with open(mensaje) as file:
-				tgrambot.send_photo(chat_id, file)
+			tgrambot.send_photo(chat_id, open(mensaje, 'rb'))
 		except FileNotFoundError:
 			logger.info("Error con el archivo")
 
