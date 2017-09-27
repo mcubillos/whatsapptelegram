@@ -112,12 +112,19 @@ class WhatsappLayer(YowInterfaceLayer):
 		jid = "%s@s.whatsapp.net" % numero
 		
 		if is_media:
-			path = mensaje
-			entidad = self.get_upload_entity(path)
-			logger.info(entidad)
-			success_fn = lambda success, original: self.on_request_upload_result(jid, path, success, original,caption)
-			error_fn = lambda error, original: self.on_request_upload_error(jid,path,error,original)
-			self._sendIq(entidad, success_fn, error_fn)
+			path, extension = os.path.splitext(mensaje)
+
+			if extension in EXT_IMAGE:
+				mediaType =  RequestUploadIqProtocolEntity.MEDIA_TYPE_IMAGE
+			if extension in EXT_VIDEO:
+				mediaType = RequestUploadIqProtocolEntity.MEDIA_TYPE_VIDEO
+			if extension in EXT_AUDIO:
+				mediaType = RequestUploadIqProtocolEntity.MEDIA_TYPE_AUDIO
+
+			entity = RequestUploadIqProtocolEntity(mediaType, filePath=mensaje)
+			successFn = lambda successEntity, originalEntity: self.onRequestUploadResult(jid, mediaType, mensaje, successEntity, originalEntity)
+			errorFn = lambda errorEntity, originalEntity: self.onRequestUploadError(jid, mensaje, errorEntity, originalEntity)
+			self._sendIq(entity, successFn, errorFn)
 		else:
 			entidad_mensaje = TextMessageProtocolEntity(mensaje,to=jid)
 			self.ackQueue.append(entidad_mensaje.getId())
@@ -129,50 +136,38 @@ class WhatsappLayer(YowInterfaceLayer):
 		if result:
 			raise ValueError(result)
 
-	def on_request_upload_result(self, jid, file_path, result_entity, request_entity, caption=None):
-		logger.info("Estoy en el upload")
-		if result_entity.isDuplicate():
-			self.send_file(file_path, result_entity.getUrl(), jid, result_entity.getIp())
-		else:
-			uploader = MediaUploader(
-				jid, self.getOwnJid(),
-				file_path,
-				result_entity.getUrl(),
-				result_entity.getResumeOffset(),
-				self.on_upload_success,
-				self.on_upload_error,
-				self.on_upload_progress,
-				async=False
-			)
-			uploader.start()
-
-	def on_request_upload_error(self, jid, file_path, error_entity, original_entity):
-		logger.info(file_path)
-		logger.info(error_entity)
-		self.disconnect("ERROR REQUEST")
-
-	def on_upload_error(self, file_path, jid, url):
-		self.disconnect("ERROR UPLOAD")
-
-	def on_upload_success(self, file_path, jid, url):
-		logger.info("Hola estoy en el upload")
-		self.send_file(file_path, url, jid)
-
-	def on_upload_progress(self, file_path, jid, url, progress):
-		logger.info("Progress: {}".format(progress))
-
-	def send_file(self, file_path, url, to, ip=None):
-		filename, extension = os.path.splitext(file_path)
-		entity = None
-		logger.info(file_path)
-		if extension in EXT_IMAGE:
-			entity = ImageDownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, ip,to, caption =caption)
-		elif extension in EXT_VIDEO:
-			entity = VideoDownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, ip, to, caption =caption)
-		elif extension in EXT_AUDIO:
-			entity = AudioDownloadableMediaMessageProtocolEntity.fromFilePath(file_path, url, ip, to)
+	def doSendMedia(self, mediaType, filePath, url, to, ip = None, caption = None):
+		if mediaType == RequestUploadIqProtocolEntity.MEDIA_TYPE_IMAGE:
+			entity = ImageDownloadableMediaMessageProtocolEntity.fromFilePath(filePath, url, ip, to, caption = caption)
+		elif mediaType == RequestUploadIqProtocolEntity.MEDIA_TYPE_AUDIO:
+			entity = AudioDownloadableMediaMessageProtocolEntity.fromFilePath(filePath, url, ip, to)
+		elif mediaType == RequestUploadIqProtocolEntity.MEDIA_TYPE_VIDEO:
+			entity = VideoDownloadableMediaMessageProtocolEntity.fromFilePath(filePath, url, ip, to, caption = caption)
 		self.toLower(entity)
-	
+
+	def onRequestUploadResult(self, jid, mediaType, filePath, resultRequestUploadIqProtocolEntity, requestUploadIqProtocolEntity, caption = None):
+
+		if resultRequestUploadIqProtocolEntity.isDuplicate():
+			self.doSendMedia(mediaType, filePath, resultRequestUploadIqProtocolEntity.getUrl(), jid,
+							 resultRequestUploadIqProtocolEntity.getIp(), caption)
+		else:
+			successFn = lambda filePath, jid, url: self.doSendMedia(mediaType, filePath, url, jid, resultRequestUploadIqProtocolEntity.getIp(), caption)
+			mediaUploader = MediaUploader(jid, self.getOwnJid(), filePath,
+									  resultRequestUploadIqProtocolEntity.getUrl(),
+									  resultRequestUploadIqProtocolEntity.getResumeOffset(),
+									  successFn, self.onUploadError, self.onUploadProgress, async=False)
+			mediaUploader.start()
+
+	def onRequestUploadError(self, jid, path, errorRequestUploadIqProtocolEntity, requestUploadIqProtocolEntity):
+		logger.error("Request upload for file %s for %s failed" % (path, jid))
+
+	def onUploadError(self, filePath, jid, url):
+		logger.error("Upload file %s to %s for %s failed!" % (filePath, url, jid))
+
+	def onUploadProgress(self, filePath, jid, url, progress):
+		sys.stdout.write("%s => %s, %d%% \r" % (os.path.basename(filePath), jid, progress))
+		sys.stdout.flush()
+
 whatsappbot = WhatsappLayer()
 
 _connect_signal = YowLayerEvent(YowNetworkLayer.EVENT_STATE_CONNECT)
